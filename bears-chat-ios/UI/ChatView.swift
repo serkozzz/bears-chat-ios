@@ -19,17 +19,25 @@ struct ChatView: View {
     
     var body: some View {
         VStack(spacing: 8) {
+            HStack {
+                Text(model.isConnected ? "Online" : "Offline")
+                    .font(.caption)
+                    .foregroundColor(model.isConnected ? .green : .red)
+                Spacer()
+            }
+            .padding(.horizontal, 8)
+
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 8) {
                         ForEach(model.history, id: \.id) { message in
                             messageRow(message)
-                                //.id(message.id)
+                                .id(message.id)
                         }
                     }
                     .padding(8)
                 }
-                .onChange(of: model.history.count) { _ in
+                .onChange(of: model.history.count) {
                     if let last = model.history.last {
                         proxy.scrollTo(last.id, anchor: .bottom)
                     }
@@ -50,7 +58,10 @@ struct ChatView: View {
                     inputText = ""
                     
                 }
-                .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(
+                    !model.isConnected ||
+                    inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                )
             }
             .padding([.horizontal, .bottom], 8)
         }
