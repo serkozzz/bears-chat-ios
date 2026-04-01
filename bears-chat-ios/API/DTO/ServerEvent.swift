@@ -12,9 +12,19 @@ struct ServerErrorPayload: Codable {
     let message: String
 }
 
+struct NewMessageServerPayload: Codable {
+    let historyGeneration: String
+    let message: Message
+}
+
+struct RequestedMessagesServerPayload: Codable {
+    let historyGeneration: String
+    let messages: [Message]
+}
+
 enum ServerEvent: Decodable {
-    case newMessage(Message)
-    case messages([Message])
+    case newMessage(NewMessageServerPayload)
+    case requestedMessages(RequestedMessagesServerPayload) // server sends requested history chunk
     case error(ServerErrorPayload)
 
     private enum CodingKeys: String, CodingKey {
@@ -24,7 +34,7 @@ enum ServerEvent: Decodable {
 
     private enum EventType: String, Codable {
         case newMessage
-        case messages
+        case requestedMessages
         case error
     }
 
@@ -34,11 +44,11 @@ enum ServerEvent: Decodable {
 
         switch type {
         case .newMessage:
-            let payload = try container.decode(Message.self, forKey: .payload)
+            let payload = try container.decode(NewMessageServerPayload.self, forKey: .payload)
             self = .newMessage(payload)
-        case .messages:
-            let payload = try container.decode([Message].self, forKey: .payload)
-            self = .messages(payload)
+        case .requestedMessages:
+            let payload = try container.decode(RequestedMessagesServerPayload.self, forKey: .payload)
+            self = .requestedMessages(payload)
         case .error:
             let payload = try container.decode(ServerErrorPayload.self, forKey: .payload)
             self = .error(payload)

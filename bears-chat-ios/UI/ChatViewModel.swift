@@ -10,12 +10,13 @@ import Combine
 
 class ChatViewModel: ObservableObject {
     @Published private(set) var history: [Message] = []
+    @Published private var messagesByID: [Int: Message] = [:]
     @Published private(set) var isConnected: Bool = false
     @Published var lastError: UIError?
 
     private let sender: Sender
     private let serverAPI: ServerAPI
-    private var messagesByID: [Int: Message] = [:]
+    private var currentHistoryGeneration: String?
 
     init(userName: String, serverAPI: ServerAPI) {
         self.sender = Sender(userName: userName)
@@ -28,15 +29,26 @@ class ChatViewModel: ObservableObject {
             }
         }
 
-        serverAPI.onMessages = { [weak self] messages in
+        serverAPI.onRequestedMessages = { [weak self] payload in
             DispatchQueue.main.async {
-                self?.merge(messages)
+                self?.handleRequestedMessages(payload)
             }
         }
 
-        serverAPI.onNewMessage = { [weak self] message in
+        serverAPI.onNewMessage = { [weak self] payload in
             DispatchQueue.main.async {
                 guard let self else { return }
+                let message = payload.message
+
+                if self.currentHistoryGeneration != nil && self.currentHistoryGeneration != payload.historyGeneration {
+                    self.currentHistoryGeneration = payload.historyGeneration
+                    self.clearHistory()
+                    self.serverAPI.getAllMessages(fromID: 0)
+                }
+
+                if self.currentHistoryGeneration == nil {
+                    self.currentHistoryGeneration = payload.historyGeneration
+                }
 
                 if message.id - self.lastMessageID > 1 {
                     self.serverAPI.getAllMessages(fromID: self.lastMessageID + 1)
@@ -57,13 +69,13 @@ class ChatViewModel: ObservableObject {
 
     deinit {
         serverAPI.onConnectionChanged = nil
-        serverAPI.onMessages = nil
+        serverAPI.onRequestedMessages = nil
         serverAPI.onNewMessage = nil
         serverAPI.onError = nil
     }
 
     private var lastMessageID: Int {
-        history.last?.id ?? 0
+        messagesByID.keys.max() ?? 0
     }
 
     private func syncConnectionState(_ connected: Bool) {
@@ -78,14 +90,33 @@ class ChatViewModel: ObservableObject {
         serverAPI.getAllMessages(fromID: fromID)
     }
 
-    private func merge(_ messages: [Message]) {
-        for message in messages {
-            messagesByID[message.id] = message
+    private func handleRequestedMessages(_ payload: RequestedMessagesServerPayload) {
+        if currentHistoryGeneration != nil && currentHistoryGeneration != payload.historyGeneration {
+            currentHistoryGeneration = payload.historyGeneration
+            clearHistory()
+            serverAPI.getAllMessages(fromID: 0)
         }
 
-        history = messagesByID
-            .values
-            .sorted(by: { $0.id < $1.id })
+        if currentHistoryGeneration == nil {
+            currentHistoryGeneration = payload.historyGeneration
+        }
+
+        merge(payload.messages)
+    }
+
+    private func clearHistory() {
+        messagesByID.removeAll()
+        history = []
+    }
+
+    private func merge(_ messages: [Message]) {
+        var mergedByID = messagesByID
+        for message in messages {
+            mergedByID[message.id] = message
+        }
+
+        messagesByID = mergedByID
+        history = mergedByID.values.sorted(by: { $0.id < $1.id })
     }
     
     func isOwnMessage(_ message: Message) -> Bool {

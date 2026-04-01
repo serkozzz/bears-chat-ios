@@ -10,8 +10,8 @@ import Foundation
 class ServerAPI {
     private(set) var isConnected: Bool = false
 
-    var onNewMessage: ((Message) -> Void)?
-    var onMessages: (([Message]) -> Void)?
+    var onNewMessage: ((NewMessageServerPayload) -> Void)?
+    var onRequestedMessages: ((RequestedMessagesServerPayload) -> Void)?
     var onError: ((String) -> Void)?
     var onConnectionChanged: ((Bool) -> Void)?
 
@@ -79,10 +79,10 @@ class ServerAPI {
             let event = try decoder.decode(ServerEvent.self, from: data)
 
             switch event {
-            case .newMessage(let message):
-                onNewMessage?(message)
-            case .messages(let messages):
-                onMessages?(messages)
+            case .newMessage(let payload):
+                onNewMessage?(payload)
+            case .requestedMessages(let payload):
+                onRequestedMessages?(payload)
             case .error(let payload):
                 onError?(payload.message)
             }
