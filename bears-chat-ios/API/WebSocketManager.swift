@@ -1,5 +1,5 @@
 //
-//  WebSocketClient.swift
+//  WebSocketManager.swift
 //  bears-chat-ios
 //
 //  Created by Sergey Kozlov on 01.04.2026.
@@ -7,7 +7,7 @@
 
 import Foundation
 
-final class WebSocketManager {
+final class WebSocketManager: NSObject {
     var onTextMessage: ((String) -> Void)?
     var onError: ((String) -> Void)?
     var onConnectionChanged: ((Bool) -> Void)?
@@ -15,17 +15,21 @@ final class WebSocketManager {
     private(set) var isConnected: Bool = false
 
     private let url: URL
-    private let session: URLSession
     private let reconnectDelay: TimeInterval
+    private let requestTimeout: TimeInterval
+    private lazy var session: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        return URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+    }()
 
     private var socketTask: URLSessionWebSocketTask?
     private var shouldReconnect = true
     private var reconnectWorkItem: DispatchWorkItem?
 
-    init(url: URL, session: URLSession = .shared, reconnectDelay: TimeInterval = 1.5) {
+    init(url: URL, reconnectDelay: TimeInterval = 1.5, requestTimeout: TimeInterval = 5) {
         self.url = url
-        self.session = session
         self.reconnectDelay = reconnectDelay
+        self.requestTimeout = requestTimeout
     }
 
     func connect() {
@@ -59,10 +63,12 @@ final class WebSocketManager {
         socketTask?.cancel(with: .goingAway, reason: nil)
         socketTask = nil
 
-        let task = session.webSocketTask(with: url)
+        var request = URLRequest(url: url)
+        request.timeoutInterval = requestTimeout
+
+        let task = session.webSocketTask(with: request)
         socketTask = task
         task.resume()
-        updateConnectionState(true)
         receiveNextSocketMessage()
     }
 
@@ -75,7 +81,6 @@ final class WebSocketManager {
             switch result {
             case .failure(let error):
                 self.onError?(error.localizedDescription)
-                self.updateConnectionState(false)
                 self.rescheduleReconnectIfNeeded()
             case .success(let message):
                 self.handleIncoming(message)
@@ -118,5 +123,25 @@ final class WebSocketManager {
         guard isConnected != connected else { return }
         isConnected = connected
         onConnectionChanged?(connected)
+    }
+}
+
+extension WebSocketManager: URLSessionWebSocketDelegate {
+    func urlSession(
+        _ session: URLSession,
+        webSocketTask: URLSessionWebSocketTask,
+        didOpenWithProtocol protocol: String?
+    ) {
+        updateConnectionState(true)
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        webSocketTask: URLSessionWebSocketTask,
+        didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
+        reason: Data?
+    ) {
+        updateConnectionState(false)
+        rescheduleReconnectIfNeeded()
     }
 }

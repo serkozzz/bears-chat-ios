@@ -19,8 +19,8 @@ class ServerAPI {
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    init(session: URLSession = .shared) {
-        self.webSocketClient = WebSocketManager(url: API.webSocketURL, session: session)
+    init() {
+        self.webSocketClient = WebSocketManager(url: API.webSocketURL)
         decoder.dateDecodingStrategy = .iso8601
         encoder.dateEncodingStrategy = .iso8601
 
