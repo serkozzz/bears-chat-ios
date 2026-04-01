@@ -8,6 +8,8 @@
 import Foundation
 
 class ServerAPI {
+    private(set) var isConnected: Bool = false
+
     var onNewMessage: ((Message) -> Void)?
     var onMessages: (([Message]) -> Void)?
     var onError: ((String) -> Void)?
@@ -30,6 +32,7 @@ class ServerAPI {
         let task = session.webSocketTask(with: API.webSocketURL)
         socketTask = task
         task.resume()
+        isConnected = true
         onConnectionChanged?(true)
         receiveNextMessage()
     }
@@ -37,6 +40,7 @@ class ServerAPI {
     func disconnect() {
         socketTask?.cancel(with: .goingAway, reason: nil)
         socketTask = nil
+        isConnected = false
         onConnectionChanged?(false)
     }
 
@@ -78,6 +82,7 @@ class ServerAPI {
 
             switch result {
             case .failure(let error):
+                self.isConnected = false
                 self.onError?(error.localizedDescription)
                 self.onConnectionChanged?(false)
             case .success(let message):

@@ -11,24 +11,20 @@ import Combine
 class ChatViewModel: ObservableObject {
     @Published private(set) var history: [Message] = []
     @Published private(set) var isConnected: Bool = false
-    @Published private(set) var lastError: String = ""
+    @Published var lastError: UIError?
 
     private let sender: Sender
     private let serverAPI: ServerAPI
     private var messagesByID: [Int: Message] = [:]
 
-    init (userName: String) {
+    init(userName: String, serverAPI: ServerAPI) {
         self.sender = Sender(userName: userName)
-        self.serverAPI = ServerAPI()
+        self.serverAPI = serverAPI
 
         serverAPI.onConnectionChanged = { [weak self] connected in
             DispatchQueue.main.async {
                 guard let self else { return }
-                self.isConnected = connected
-                if connected {
-                    let fromID = self.lastMessageID == 0 ? 0 : self.lastMessageID + 1
-                    self.serverAPI.getAllMessages(fromID: fromID)
-                }
+                self.syncConnectionState(connected)
             }
         }
 
@@ -50,21 +46,36 @@ class ChatViewModel: ObservableObject {
             }
         }
 
+        syncConnectionState(serverAPI.isConnected)
+
         serverAPI.onError = { [weak self] error in
             DispatchQueue.main.async {
-                self?.lastError = error
+                self?.lastError = UIError(message: error)
             }
         }
-
-        serverAPI.connect()
     }
 
     deinit {
-        serverAPI.disconnect()
+        serverAPI.onConnectionChanged = nil
+        serverAPI.onMessages = nil
+        serverAPI.onNewMessage = nil
+        serverAPI.onError = nil
     }
 
     private var lastMessageID: Int {
         history.last?.id ?? 0
+    }
+
+    private func syncConnectionState(_ connected: Bool) {
+        isConnected = connected
+        if connected {
+            requestMissedMessages()
+        }
+    }
+
+    private func requestMissedMessages() {
+        let fromID = lastMessageID == 0 ? 0 : lastMessageID + 1
+        serverAPI.getAllMessages(fromID: fromID)
     }
 
     private func merge(_ messages: [Message]) {

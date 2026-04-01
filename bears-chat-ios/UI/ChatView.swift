@@ -13,8 +13,8 @@ struct ChatView: View {
     @State private var inputText: String = ""
     @FocusState private var isInputFocused: Bool
     
-    init(userName: String) {
-        _model = StateObject(wrappedValue: .init(userName: userName))
+    init(userName: String, serverAPI: ServerAPI) {
+        _model = StateObject(wrappedValue: .init(userName: userName, serverAPI: serverAPI))
     }
     
     var body: some View {
@@ -66,6 +66,13 @@ struct ChatView: View {
             .padding([.horizontal, .bottom], 8)
         }
         .background(Color.white.ignoresSafeArea())
+        .alert(item: $model.lastError) { error in
+            Alert(
+                title: Text("Error"),
+                message: Text(error.message),
+                dismissButton: .cancel(Text("OK"))
+            )
+        }
     }
     
     private func messageRow(_ message: Message) -> some View {
