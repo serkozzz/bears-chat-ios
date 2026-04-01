@@ -51,7 +51,7 @@ final class WebSocketManager: NSObject {
 
         socketTask.send(.string(text)) { [weak self] error in
             if let error {
-                self?.onError?(error.localizedDescription)
+                self?.reportErrorIfNeeded(error)
             }
         }
     }
@@ -80,7 +80,7 @@ final class WebSocketManager: NSObject {
 
             switch result {
             case .failure(let error):
-                self.onError?(error.localizedDescription)
+                self.reportErrorIfNeeded(error)
                 self.rescheduleReconnectIfNeeded()
             case .success(let message):
                 self.handleIncoming(message)
@@ -124,7 +124,13 @@ final class WebSocketManager: NSObject {
         isConnected = connected
         onConnectionChanged?(connected)
     }
+
+    private func reportErrorIfNeeded(_ error: Error) {
+        guard WebSocketErrorsHelper.shouldDisplay(error) else { return }
+        onError?(error.localizedDescription)
+    }
 }
+
 
 extension WebSocketManager: URLSessionWebSocketDelegate {
     func urlSession(
@@ -141,6 +147,21 @@ extension WebSocketManager: URLSessionWebSocketDelegate {
         didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
         reason: Data?
     ) {
+        updateConnectionState(false)
+        rescheduleReconnectIfNeeded()
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didCompleteWithError error: Error?
+    ) {
+        guard task == socketTask else { return }
+
+        if let error {
+            reportErrorIfNeeded(error)
+        }
+
         updateConnectionState(false)
         rescheduleReconnectIfNeeded()
     }
