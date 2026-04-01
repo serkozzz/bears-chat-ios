@@ -15,33 +15,34 @@ class ServerAPI {
     var onError: ((String) -> Void)?
     var onConnectionChanged: ((Bool) -> Void)?
 
-    private let session: URLSession
-    private var socketTask: URLSessionWebSocketTask?
+    private let webSocketClient: WebSocketManager
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
     init(session: URLSession = .shared) {
-        self.session = session
+        self.webSocketClient = WebSocketManager(url: API.webSocketURL, session: session)
         decoder.dateDecodingStrategy = .iso8601
         encoder.dateEncodingStrategy = .iso8601
+
+        webSocketClient.onConnectionChanged = { [weak self] connected in
+            self?.updateConnectionState(connected)
+        }
+
+        webSocketClient.onError = { [weak self] error in
+            self?.onError?(error)
+        }
+
+        webSocketClient.onTextMessage = { [weak self] text in
+            self?.handleIncoming(text)
+        }
     }
 
     func connect() {
-        disconnect()
-
-        let task = session.webSocketTask(with: API.webSocketURL)
-        socketTask = task
-        task.resume()
-        isConnected = true
-        onConnectionChanged?(true)
-        receiveNextMessage()
+        webSocketClient.connect()
     }
 
     func disconnect() {
-        socketTask?.cancel(with: .goingAway, reason: nil)
-        socketTask = nil
-        isConnected = false
-        onConnectionChanged?(false)
+        webSocketClient.disconnect()
     }
 
     func sendMessage(text: String, sender: Sender) {
@@ -55,8 +56,6 @@ class ServerAPI {
     }
 
     private func send(_ event: ClientEvent) {
-        guard let socketTask else { return }
-
         do {
             let data = try encoder.encode(event)
             guard let text = String(data: data, encoding: .utf8) else {
@@ -64,52 +63,19 @@ class ServerAPI {
                 return
             }
 
-            socketTask.send(.string(text)) { [weak self] error in
-                if let error {
-                    self?.onError?(error.localizedDescription)
-                }
-            }
+            webSocketClient.send(text: text)
         } catch {
             onError?(error.localizedDescription)
         }
     }
 
-    private func receiveNextMessage() {
-        guard let socketTask else { return }
-
-        socketTask.receive { [weak self] result in
-            guard let self else { return }
-
-            switch result {
-            case .failure(let error):
-                self.isConnected = false
-                self.onError?(error.localizedDescription)
-                self.onConnectionChanged?(false)
-            case .success(let message):
-                self.handleIncoming(message)
-                self.receiveNextMessage()
-            }
-        }
-    }
-
-    private func handleIncoming(_ message: URLSessionWebSocketTask.Message) {
-        let data: Data
-
-        switch message {
-        case .data(let raw):
-            data = raw
-        case .string(let raw):
-            guard let converted = raw.data(using: .utf8) else {
+    private func handleIncoming(_ text: String) {
+        do {
+            guard let data = text.data(using: .utf8) else {
                 onError?("Invalid UTF-8 payload")
                 return
             }
-            data = converted
-        @unknown default:
-            onError?("Unsupported websocket message")
-            return
-        }
 
-        do {
             let event = try decoder.decode(ServerEvent.self, from: data)
 
             switch event {
@@ -123,5 +89,11 @@ class ServerAPI {
         } catch {
             onError?(error.localizedDescription)
         }
+    }
+
+    private func updateConnectionState(_ connected: Bool) {
+        guard isConnected != connected else { return }
+        isConnected = connected
+        onConnectionChanged?(connected)
     }
 }
