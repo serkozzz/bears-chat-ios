@@ -12,9 +12,14 @@ struct ChatView: View {
     @StateObject private var model: ChatViewModel
     @State private var inputText: String = ""
     @FocusState private var isInputFocused: Bool
+    private let dateFormatter: DateFormatter
     
     init(userName: String, serverAPI: ServerAPI) {
         _model = StateObject(wrappedValue: .init(userName: userName, serverAPI: serverAPI))
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        self.dateFormatter = formatter
     }
     
     var body: some View {
@@ -81,15 +86,21 @@ struct ChatView: View {
             if isOwn {
                 Spacer(minLength: 0)
             }
-            Text(message.text)
-                .padding(8)
-                .background(isOwn ? Color.gray.opacity(0.2) : Color.white)
-                .foregroundColor(.black)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .stroke(Color.black.opacity(0.1), lineWidth: 1)
-                )
+            VStack(alignment: isOwn ? .trailing : .leading, spacing: 4) {
+                Text("#\(message.id) \(message.sender.userName) \(dateFormatter.string(from: message.date))")
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+
+                Text(message.text)
+                    .foregroundColor(.black)
+            }
+            .padding(8)
+            .background(isOwn ? Color(red: 0.76, green: 0.93, blue: 0.82) : Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(Color.black.opacity(0.1), lineWidth: 1)
+            )
             if !isOwn {
                 Spacer(minLength: 0)
             }
