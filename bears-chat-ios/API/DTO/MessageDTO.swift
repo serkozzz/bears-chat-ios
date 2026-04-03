@@ -7,9 +7,9 @@
 
 import Foundation
 
-struct Message: Codable {
+struct MessageDTO: Codable {
     let id: Int
     let text: String
-    let sender: Sender
+    let sender: SenderDTO
     let date: Date
 }

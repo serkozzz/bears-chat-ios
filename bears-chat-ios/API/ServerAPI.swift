@@ -18,8 +18,11 @@ class ServerAPI {
     private let webSocketClient: WebSocketManager
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
+    private let urlSession: URLSession
+    private var pushToken: String?
 
     init() {
+        self.urlSession = .shared
         self.webSocketClient = WebSocketManager(url: API.webSocketURL)
         decoder.dateDecodingStrategy = .iso8601
         encoder.dateEncodingStrategy = .iso8601
@@ -45,7 +48,7 @@ class ServerAPI {
         webSocketClient.disconnect()
     }
 
-    func sendMessage(text: String, sender: Sender) {
+    func sendMessage(text: String, sender: SenderDTO) {
         let event: ClientEvent = .sendMessage(SendMessagePayload(text: text, sender: sender))
         send(event)
     }
@@ -53,6 +56,18 @@ class ServerAPI {
     func getAllMessages(fromID: Int) {
         let event: ClientEvent = .getAllMessagesFrom(GetAllMessagesFromPayload(fromId: fromID))
         send(event)
+    }
+
+    func updatePushToken(_ token: String) {
+        guard !token.isEmpty else { return }
+        guard pushToken != token else { return }
+        pushToken = token
+        registerPushToken(userName: nil)
+    }
+
+    func registerPushTokenIfAvailable(userName: String) {
+        guard !userName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        registerPushToken(userName: userName)
     }
 
     private func send(_ event: ClientEvent) {
@@ -95,5 +110,38 @@ class ServerAPI {
         guard isConnected != connected else { return }
         isConnected = connected
         onConnectionChanged?(connected)
+    }
+
+    private func registerPushToken(userName: String?) {
+        guard let pushToken else { return }
+
+        let body = RegisterPushTokenDTO(token: pushToken, userName: userName)
+
+        do {
+            let data = try encoder.encode(body)
+            var request = URLRequest(url: API.registerPushTokenURL)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = data
+
+            urlSession.dataTask(with: request) { [weak self] _, response, error in
+                if let error {
+                    self?.onError?(error.localizedDescription)
+                    return
+                }
+
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    self?.onError?("Push token registration: invalid response")
+                    return
+                }
+
+                guard (200...299).contains(httpResponse.statusCode) else {
+                    self?.onError?("Push token registration failed with status \(httpResponse.statusCode)")
+                    return
+                }
+            }.resume()
+        } catch {
+            onError?(error.localizedDescription)
+        }
     }
 }

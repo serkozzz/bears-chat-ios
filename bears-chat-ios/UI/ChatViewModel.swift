@@ -9,18 +9,19 @@ import SwiftUI
 import Combine
 
 class ChatViewModel: ObservableObject {
-    @Published private(set) var history: [Message] = []
-    @Published private var messagesByID: [Int: Message] = [:]
+    @Published private(set) var history: [MessageDTO] = []
+    @Published private var messagesByID: [Int: MessageDTO] = [:]
     @Published private(set) var isConnected: Bool = false
     @Published var lastError: UIError?
 
-    private let sender: Sender
+    private let sender: SenderDTO
     private let serverAPI: ServerAPI
     private var currentHistoryGeneration: String?
 
     init(userName: String, serverAPI: ServerAPI) {
-        self.sender = Sender(userName: userName)
+        self.sender = SenderDTO(userName: userName)
         self.serverAPI = serverAPI
+        serverAPI.registerPushTokenIfAvailable(userName: userName)
 
         serverAPI.onConnectionChanged = { [weak self] connected in
             DispatchQueue.main.async {
@@ -109,7 +110,7 @@ class ChatViewModel: ObservableObject {
         history = []
     }
 
-    private func merge(_ messages: [Message]) {
+    private func merge(_ messages: [MessageDTO]) {
         var mergedByID = messagesByID
         for message in messages {
             mergedByID[message.id] = message
@@ -119,7 +120,7 @@ class ChatViewModel: ObservableObject {
         history = mergedByID.values.sorted(by: { $0.id < $1.id })
     }
     
-    func isOwnMessage(_ message: Message) -> Bool {
+    func isOwnMessage(_ message: MessageDTO) -> Bool {
         message.sender == sender
     }
     

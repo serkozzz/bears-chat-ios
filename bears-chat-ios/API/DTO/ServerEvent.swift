@@ -14,12 +14,12 @@ struct ServerErrorPayload: Codable {
 
 struct NewMessageServerPayload: Codable {
     let historyGeneration: String
-    let message: Message
+    let message: MessageDTO
 }
 
 struct RequestedMessagesServerPayload: Codable {
     let historyGeneration: String
-    let messages: [Message]
+    let messages: [MessageDTO]
 }
 
 enum ServerEvent: Decodable {

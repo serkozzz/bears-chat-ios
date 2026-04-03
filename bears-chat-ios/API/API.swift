@@ -16,4 +16,8 @@ enum API {
         components.scheme = (components.scheme == "https") ? "wss" : "ws"
         return components.url!
     }
+
+    static var registerPushTokenURL: URL {
+        baseURL.appendingPathComponent("push/register")
+    }
 }

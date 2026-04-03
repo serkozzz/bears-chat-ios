@@ -80,7 +80,7 @@ struct ChatView: View {
         }
     }
     
-    private func messageRow(_ message: Message) -> some View {
+    private func messageRow(_ message: MessageDTO) -> some View {
         HStack {
             let isOwn = model.isOwnMessage(message)
             if isOwn {

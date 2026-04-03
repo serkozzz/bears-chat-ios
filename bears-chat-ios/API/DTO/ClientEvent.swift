@@ -9,7 +9,7 @@ import Foundation
 
 struct SendMessagePayload: Codable {
     let text: String
-    let sender: Sender
+    let sender: SenderDTO
 }
 
 struct GetAllMessagesFromPayload: Codable {
