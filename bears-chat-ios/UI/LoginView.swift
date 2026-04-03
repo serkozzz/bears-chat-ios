@@ -13,6 +13,7 @@ struct LoginView: View {
     
     var body: some View {
         VStack {
+            Image(.launchLogo).resizable().frame(width: 400, height: 400)
             HStack {
                 Text("Имя:")
                 TextField("введите имя", text: $userName)
@@ -23,9 +24,8 @@ struct LoginView: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(userName.isEmpty)
             }
-   
-
         }
+        .gradientBackground()
     }
 }
 

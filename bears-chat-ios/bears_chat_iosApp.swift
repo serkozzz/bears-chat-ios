@@ -18,6 +18,7 @@ struct bears_chat_iosApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView(serverAPI: serverAPI)
+                //.gradientBackground()
         }
     }
 }

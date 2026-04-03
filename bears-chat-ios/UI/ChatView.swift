@@ -70,7 +70,7 @@ struct ChatView: View {
             }
             .padding([.horizontal, .bottom], 8)
         }
-        .background(Color.white.ignoresSafeArea())
+        .background(Color.bearsBackgroundPrimary)
         .alert(item: $model.lastError) { error in
             Alert(
                 title: Text("Error"),
