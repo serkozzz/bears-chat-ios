@@ -13,7 +13,19 @@ struct ChatView: View {
     @State private var inputText: String = ""
     @FocusState private var isInputFocused: Bool
     private let dateFormatter: DateFormatter
-    @State private var backgroundColor: Color = .white
+   
+    
+    @AppStorage("chatBackgroundColorHex") private var backgroundColorHex = "#FFFFFF"
+    
+    private var backgroundColorBinding: Binding<Color> {
+        Binding(
+            get: {  ColorHex.fromHex(backgroundColorHex) ?? .white },
+            set: { newValue in
+                backgroundColorHex = ColorHex.toHex(newValue) ?? "#FFFFFF"
+            }
+        )
+    }
+
     @State private var isSettingsSheetPresented: Bool = false
     
     init(userName: String, serverAPI: ServerAPI) {
@@ -79,11 +91,11 @@ struct ChatView: View {
             .padding([.horizontal, .bottom], 8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(backgroundColor)
+        .background(backgroundColorBinding.wrappedValue)
         .sheet(isPresented: $isSettingsSheetPresented) {
             NavigationStack {
                 Form {
-                    ColorPicker("Background color", selection: $backgroundColor, supportsOpacity: false)
+                    ColorPicker("Background color", selection: backgroundColorBinding, supportsOpacity: false)
                 }
                 .navigationTitle("Settings")
             }
