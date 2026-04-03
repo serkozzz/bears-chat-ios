@@ -13,6 +13,8 @@ struct ChatView: View {
     @State private var inputText: String = ""
     @FocusState private var isInputFocused: Bool
     private let dateFormatter: DateFormatter
+    @State private var backgroundColor: Color = .white
+    @State private var isSettingsSheetPresented: Bool = false
     
     init(userName: String, serverAPI: ServerAPI) {
         _model = StateObject(wrappedValue: .init(userName: userName, serverAPI: serverAPI))
@@ -29,6 +31,12 @@ struct ChatView: View {
                     .font(.caption)
                     .foregroundColor(model.isConnected ? .green : .red)
                 Spacer()
+                
+                Button() {
+                    isSettingsSheetPresented = true
+                } label: {
+                    Image(systemName: "gear")
+                }
             }
             .padding(.horizontal, 8)
 
@@ -70,7 +78,17 @@ struct ChatView: View {
             }
             .padding([.horizontal, .bottom], 8)
         }
-        .background(Color.bearsBackgroundPrimary)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(backgroundColor)
+        .sheet(isPresented: $isSettingsSheetPresented) {
+            NavigationStack {
+                Form {
+                    ColorPicker("Background color", selection: $backgroundColor, supportsOpacity: false)
+                }
+                .navigationTitle("Settings")
+            }
+            .presentationDetents([.medium])
+        }
         .alert(item: $model.lastError) { error in
             Alert(
                 title: Text("Error"),

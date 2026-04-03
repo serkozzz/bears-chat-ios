@@ -9,6 +9,7 @@ import SwiftUI
 
 struct LoginView: View {
     @State var userName = ""
+    @FocusState private var isUserNameFocused: Bool
     var onSuccess: ((String) -> Void)?
     
     var body: some View {
@@ -18,12 +19,22 @@ struct LoginView: View {
                 Text("Имя:")
                 TextField("введите имя", text: $userName)
                     .frame(maxWidth: 200)
+                    .focused($isUserNameFocused)
                 Button("Далее") {
                     onSuccess?(userName)
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(userName.isEmpty)
             }
+            .padding()
+            .background{
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(.white))
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            isUserNameFocused = false
         }
         .gradientBackground()
     }
