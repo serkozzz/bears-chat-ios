@@ -9,10 +9,17 @@ import SwiftUI
 import Combine
 
 class LoginViewModel: ObservableObject {
+    
+    enum State {
+        case enteringPhone
+        case waitingTelegramConfirmation
+    }
+    
     private let serverAPI: ServerAPI
     private let onSuccess: ((String) -> Void)?
     
-    @Published var isRegistering = false
+    @Published var state = State.enteringPhone
+    @Published var isLoading = false
     @Published var error: UIError?
     @Published var phoneNumber = ""
     @Published var verificationURLToOpen: URL?
@@ -24,17 +31,18 @@ class LoginViewModel: ObservableObject {
     }
     
     var isLoginDisabled: Bool {
-        phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isRegistering
+        phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading
     }
     
-    func requestTelegramVerification() {
+    func requestLinkForTelegramVerification() {
         let deviceID = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
-        isRegistering = true
+        isLoading = true
 
         serverAPI.registerForTelegramVerification(phoneNumber: phoneNumber, deviceId: deviceID) { result in
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                isRegistering = false
+                isLoading = false
+                state = .waitingTelegramConfirmation
                 switch result {
                 case .success(let payload):
                     if payload.isVerified {
@@ -48,7 +56,6 @@ class LoginViewModel: ObservableObject {
                         return
                     }
                     self.verificationURLToOpen = url
-                    onSuccess?(phoneNumber)
                 case .failure(let error):
                     self.error = .init(message: error.localizedDescription)
                 }

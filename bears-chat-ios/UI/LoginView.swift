@@ -14,8 +14,8 @@ struct LoginView: View {
     
     @FocusState private var isPhoneInputFocused: Bool
     @Environment(\.openURL) var openURL
-
-
+    
+    
     init(serverAPI: ServerAPI, onSuccess: ((String) -> Void)?) {
         let model = LoginViewModel(serverAPI: serverAPI, onSuccess: onSuccess)
         self._model = StateObject(wrappedValue: model)
@@ -24,27 +24,14 @@ struct LoginView: View {
     var body: some View {
         VStack {
             Image(.launchLogo).resizable().frame(width: 400, height: 400)
-            HStack {
-                VStack(alignment: .leading) {
-                    Text("Номер телефона:")
-                    TextField("89ххххххххх", text: $model.phoneNumber)
-                        .frame(maxWidth: 200)
-                        .focused($isPhoneInputFocused)
-                }
-                Button("Подтвердить") {
-                    isPhoneInputFocused = false
-                    model.requestTelegramVerification()
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(model.isLoginDisabled)
+            switch model.state {
+            case .enteringPhone:
+                enteringPhoneView
+            case .waitingTelegramConfirmation:
+                waitingTelegramConfirmation
             }
-            .padding()
-            .background{
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(.white))
-            }
-
-            if model.isRegistering {
+            
+            if model.isLoading {
                 ProgressView()
             }
         }
@@ -64,6 +51,49 @@ struct LoginView: View {
                 message: Text(error.message),
                 dismissButton: .cancel(Text("OK"))
             )
+        }
+    }
+    
+    var enteringPhoneView: some View {
+        HStack {
+            VStack(alignment: .leading) {
+                Text("Номер телефона:")
+                TextField("79ххххххххх", text: $model.phoneNumber)
+                    .frame(maxWidth: 200)
+                    .focused($isPhoneInputFocused)
+            }
+            Button("Подтвердить") {
+                isPhoneInputFocused = false
+                model.requestLinkForTelegramVerification()
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(model.isLoginDisabled)
+        }
+        .padding()
+        .background{
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(.white))
+        }
+    }
+    
+    var waitingTelegramConfirmation: some View {
+        HStack {
+            VStack(alignment: .leading) {
+                Text("Ожидаем подтверждения номера в Telegram.")
+                TextField("79ххххххххх", text: $model.phoneNumber)
+                    .frame(maxWidth: 200)
+                    .disabled(true)
+                Text("В боте нажмите Start и поделитесь номером")
+                Button("Открыть Telegram снова") {
+                    model.requestLinkForTelegramVerification()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding()
+        .background{
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(.white))
         }
     }
 }
