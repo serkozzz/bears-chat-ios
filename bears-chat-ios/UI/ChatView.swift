@@ -19,7 +19,7 @@ struct ChatView: View {
     
     private var backgroundColorBinding: Binding<Color> {
         Binding(
-            get: {  ColorHex.fromHex(backgroundColorHex) ?? .white },
+            get: { ColorHex.fromHex(backgroundColorHex) ?? .white },
             set: { newValue in
                 backgroundColorHex = ColorHex.toHex(newValue) ?? "#FFFFFF"
             }

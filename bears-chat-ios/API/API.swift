@@ -20,4 +20,8 @@ enum API {
     static var registerPushTokenURL: URL {
         baseURL.appendingPathComponent("push/register")
     }
+
+    static var authRegisterURL: URL {
+        baseURL.appendingPathComponent("auth/register")
+    }
 }

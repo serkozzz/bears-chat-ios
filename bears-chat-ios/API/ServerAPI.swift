@@ -70,6 +70,82 @@ class ServerAPI {
         registerPushToken(userName: userName)
     }
 
+    func registerForTelegramVerification(
+        phoneNumber: String,
+        deviceId: String,
+        completion: @escaping (Result<AuthRegisterResponseDTO, Error>) -> Void
+    ) {
+        let cleanPhone = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanDeviceID = deviceId.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !cleanPhone.isEmpty, !cleanDeviceID.isEmpty else {
+            completion(.failure(NSError(domain: "ServerAPI", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "Phone number and device ID are required"
+            ])))
+            return
+        }
+
+        let body = AuthRegisterRequestDTO(phoneNumber: cleanPhone, deviceId: cleanDeviceID)
+
+        do {
+            let data = try encoder.encode(body)
+            var request = URLRequest(url: API.authRegisterURL)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = data
+
+            urlSession.dataTask(with: request) { [weak self] data, response, error in
+                if let error {
+                    completion(.failure(error))
+                    return
+                }
+
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    completion(.failure(NSError(domain: "ServerAPI", code: 2, userInfo: [
+                        NSLocalizedDescriptionKey: "Invalid server response"
+                    ])))
+                    return
+                }
+
+                guard let data else {
+                    completion(.failure(NSError(domain: "ServerAPI", code: 3, userInfo: [
+                        NSLocalizedDescriptionKey: "Empty server response"
+                    ])))
+                    return
+                }
+
+                guard (200...299).contains(httpResponse.statusCode) else {
+                    let fallbackMessage = "Auth register failed with status \(httpResponse.statusCode)"
+                    if let message = self?.extractMessage(from: data) {
+                        completion(.failure(NSError(domain: "ServerAPI", code: 4, userInfo: [
+                            NSLocalizedDescriptionKey: message
+                        ])))
+                    } else {
+                        completion(.failure(NSError(domain: "ServerAPI", code: 4, userInfo: [
+                            NSLocalizedDescriptionKey: fallbackMessage
+                        ])))
+                    }
+                    return
+                }
+
+                do {
+                    let result = try self?.decoder.decode(AuthRegisterResponseDTO.self, from: data)
+                    if let result {
+                        completion(.success(result))
+                    } else {
+                        completion(.failure(NSError(domain: "ServerAPI", code: 5, userInfo: [
+                            NSLocalizedDescriptionKey: "Failed to decode auth response"
+                        ])))
+                    }
+                } catch {
+                    completion(.failure(error))
+                }
+            }.resume()
+        } catch {
+            completion(.failure(error))
+        }
+    }
+
     private func send(_ event: ClientEvent) {
         do {
             let data = try encoder.encode(event)
@@ -143,5 +219,12 @@ class ServerAPI {
         } catch {
             onError?(error.localizedDescription)
         }
+    }
+
+    private func extractMessage(from data: Data) -> String? {
+        struct ErrorPayload: Decodable {
+            let message: String
+        }
+        return try? decoder.decode(ErrorPayload.self, from: data).message
     }
 }

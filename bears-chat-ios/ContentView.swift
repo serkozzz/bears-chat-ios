@@ -22,17 +22,21 @@ struct ContentView: View {
     
     var body: some View {
         NavigationStack(path: $path) {
-            LoginView() { name in
-                path.append(Route.chat(userName: name))
-            }
+            loginView
             .navigationDestination(for: Route.self) { destination in
                 switch destination {
                 case .chat(let userName):
                     ChatView(userName: userName, serverAPI: serverAPI)
                 case .login:
-                    LoginView()
+                    loginView
                 }
             }
+        }
+    }
+    
+    var loginView : some View {
+        LoginView(serverAPI: serverAPI) { name in
+            path.append(Route.chat(userName: name))
         }
     }
 }
