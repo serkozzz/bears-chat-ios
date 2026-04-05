@@ -17,6 +17,7 @@ class LoginViewModel: ObservableObject {
     
     private let serverAPI: ServerAPI
     private let onSuccess: ((String) -> Void)?
+    private let authSessionStorage: LastAuthSessionStorage
     
     @Published var state = State.enteringPhone
     @Published var isLoading = false
@@ -25,9 +26,12 @@ class LoginViewModel: ObservableObject {
     @Published var verificationURLToOpen: URL?
     
     init(serverAPI: ServerAPI,
+         authSessionStorage: LastAuthSessionStorage = .shared,
          onSuccess: ((String) -> Void)? ) {
         self.serverAPI = serverAPI
+        self.authSessionStorage = authSessionStorage
         self.onSuccess = onSuccess
+        restoreLastAuthSessionIfNeeded()
     }
     
     var isLoginDisabled: Bool {
@@ -35,18 +39,27 @@ class LoginViewModel: ObservableObject {
     }
     
     func requestLinkForTelegramVerification() {
-        let deviceID = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
+        let cleanPhone = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanPhone.isEmpty else { return }
+
+        let deviceID = resolveDeviceId()
+        authSessionStorage.save(
+            LastAuthSession(
+                phoneNumber: cleanPhone,
+                deviceId: deviceID,
+                updatedAt: Date()
+            )
+        )
         isLoading = true
 
-        serverAPI.registerForTelegramVerification(phoneNumber: phoneNumber, deviceId: deviceID) { result in
+        serverAPI.registerForTelegramVerification(phoneNumber: cleanPhone, deviceId: deviceID) { result in
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 isLoading = false
-                state = .waitingTelegramConfirmation
                 switch result {
                 case .success(let payload):
                     if payload.isVerified {
-                        onSuccess?(phoneNumber)
+                        onSuccess?(cleanPhone)
                         return
                     }
 
@@ -55,11 +68,46 @@ class LoginViewModel: ObservableObject {
                         self.error = .init(message: "Ссылка верификации не получена")
                         return
                     }
+                    state = .waitingTelegramConfirmation
+                    phoneNumber = cleanPhone
                     self.verificationURLToOpen = url
                 case .failure(let error):
                     self.error = .init(message: error.localizedDescription)
                 }
             }
         }
+    }
+
+    func checkVerificationStatus() {
+        guard let session = authSessionStorage.load() else { return }
+        isLoading = true
+
+        serverAPI.getAuthStatus(phoneNumber: session.phoneNumber, deviceId: session.deviceId) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.isLoading = false
+
+                switch result {
+                case .success(let payload):
+                    if payload.isVerified {
+                        self.onSuccess?(session.phoneNumber)
+                    } else {
+                        self.state = .waitingTelegramConfirmation
+                        self.phoneNumber = session.phoneNumber
+                    }
+                case .failure(let error):
+                    self.error = .init(message: error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private func restoreLastAuthSessionIfNeeded() {
+        guard let session = authSessionStorage.load() else { return }
+        phoneNumber = session.phoneNumber
+    }
+
+    private func resolveDeviceId() -> String {
+        UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
     }
 }

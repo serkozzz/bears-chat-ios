@@ -24,4 +24,8 @@ enum API {
     static var authRegisterURL: URL {
         baseURL.appendingPathComponent("auth/register")
     }
+
+    static var authStatusURL: URL {
+        baseURL.appendingPathComponent("auth/status")
+    }
 }

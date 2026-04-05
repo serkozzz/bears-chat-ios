@@ -7,6 +7,39 @@
 
 import Foundation
 
+enum ServerAPIError: LocalizedError {
+    case missingRequiredParameters([String])
+    case invalidURL
+    case invalidResponse
+    case emptyResponse
+    case httpStatus(code: Int, message: String?)
+    case decodingFailed(type: String)
+    case encodingFailed(underlying: Error)
+    case network(underlying: Error)
+
+    var errorDescription: String? {
+        switch self {
+        case .missingRequiredParameters(let names):
+            let joined = names.joined(separator: ", ")
+            return "Required parameters are missing: \(joined)"
+        case .invalidURL:
+            return "Failed to build request URL"
+        case .invalidResponse:
+            return "Invalid server response"
+        case .emptyResponse:
+            return "Empty server response"
+        case .httpStatus(let code, let message):
+            return message ?? "Request failed with status \(code)"
+        case .decodingFailed(let type):
+            return "Failed to decode response: \(type)"
+        case .encodingFailed(let underlying):
+            return "Failed to encode request: \(underlying.localizedDescription)"
+        case .network(let underlying):
+            return underlying.localizedDescription
+        }
+    }
+}
+
 class ServerAPI {
     private(set) var isConnected: Bool = false
 
@@ -79,9 +112,7 @@ class ServerAPI {
         let cleanDeviceID = deviceId.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !cleanPhone.isEmpty, !cleanDeviceID.isEmpty else {
-            completion(.failure(NSError(domain: "ServerAPI", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "Phone number and device ID are required"
-            ])))
+            completion(.failure(ServerAPIError.missingRequiredParameters(["phoneNumber", "deviceId"])))
             return
         }
 
@@ -96,35 +127,23 @@ class ServerAPI {
 
             urlSession.dataTask(with: request) { [weak self] data, response, error in
                 if let error {
-                    completion(.failure(error))
+                    completion(.failure(ServerAPIError.network(underlying: error)))
                     return
                 }
 
                 guard let httpResponse = response as? HTTPURLResponse else {
-                    completion(.failure(NSError(domain: "ServerAPI", code: 2, userInfo: [
-                        NSLocalizedDescriptionKey: "Invalid server response"
-                    ])))
+                    completion(.failure(ServerAPIError.invalidResponse))
                     return
                 }
 
                 guard let data else {
-                    completion(.failure(NSError(domain: "ServerAPI", code: 3, userInfo: [
-                        NSLocalizedDescriptionKey: "Empty server response"
-                    ])))
+                    completion(.failure(ServerAPIError.emptyResponse))
                     return
                 }
 
                 guard (200...299).contains(httpResponse.statusCode) else {
-                    let fallbackMessage = "Auth register failed with status \(httpResponse.statusCode)"
-                    if let message = self?.extractMessage(from: data) {
-                        completion(.failure(NSError(domain: "ServerAPI", code: 4, userInfo: [
-                            NSLocalizedDescriptionKey: message
-                        ])))
-                    } else {
-                        completion(.failure(NSError(domain: "ServerAPI", code: 4, userInfo: [
-                            NSLocalizedDescriptionKey: fallbackMessage
-                        ])))
-                    }
+                    let message = self?.extractMessage(from: data)
+                    completion(.failure(ServerAPIError.httpStatus(code: httpResponse.statusCode, message: message)))
                     return
                 }
 
@@ -133,17 +152,87 @@ class ServerAPI {
                     if let result {
                         completion(.success(result))
                     } else {
-                        completion(.failure(NSError(domain: "ServerAPI", code: 5, userInfo: [
-                            NSLocalizedDescriptionKey: "Failed to decode auth response"
-                        ])))
+                        completion(.failure(ServerAPIError.decodingFailed(type: "AuthRegisterResponseDTO")))
                     }
                 } catch {
-                    completion(.failure(error))
+                    completion(.failure(ServerAPIError.decodingFailed(type: "AuthRegisterResponseDTO")))
                 }
             }.resume()
         } catch {
-            completion(.failure(error))
+            completion(.failure(ServerAPIError.encodingFailed(underlying: error)))
         }
+    }
+
+    func getAuthStatus(
+        phoneNumber: String,
+        deviceId: String,
+        completion: @escaping (Result<AuthStatusResponseDTO, Error>) -> Void
+    ) {
+        let cleanPhone = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanDeviceID = deviceId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let query = AuthStatusRequestDTO(phoneNumber: cleanPhone, deviceId: cleanDeviceID)
+
+        guard !cleanPhone.isEmpty, !cleanDeviceID.isEmpty else {
+            completion(.failure(ServerAPIError.missingRequiredParameters(["phoneNumber", "deviceId"])))
+            return
+        }
+
+        var components = URLComponents(url: API.authStatusURL, resolvingAgainstBaseURL: false)
+        components?.queryItems = [
+            URLQueryItem(name: "phoneNumber", value: query.phoneNumber),
+            URLQueryItem(name: "deviceId", value: query.deviceId)
+        ]
+
+        guard let url = components?.url else {
+            completion(.failure(ServerAPIError.invalidURL))
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+
+        urlSession.dataTask(with: request) { [weak self] data, response, error in
+            if let error {
+                completion(.failure(ServerAPIError.network(underlying: error)))
+                return
+            }
+
+            guard let httpResponse = response as? HTTPURLResponse else {
+                completion(.failure(ServerAPIError.invalidResponse))
+                return
+            }
+
+            if httpResponse.statusCode == 404 {
+                completion(.success(AuthStatusResponseDTO(isVerified: false)))
+                return
+            }
+
+            guard let data else {
+                completion(.failure(ServerAPIError.emptyResponse))
+                return
+            }
+
+            guard (200...299).contains(httpResponse.statusCode) else {
+                let message = self?.extractMessage(from: data)
+                completion(
+                    .failure(
+                        ServerAPIError.httpStatus(code: httpResponse.statusCode, message: message)
+                    )
+                )
+                return
+            }
+
+            do {
+                let result = try self?.decoder.decode(AuthStatusResponseDTO.self, from: data)
+                if let result {
+                    completion(.success(result))
+                } else {
+                    completion(.failure(ServerAPIError.decodingFailed(type: "AuthStatusResponseDTO")))
+                }
+            } catch {
+                completion(.failure(ServerAPIError.decodingFailed(type: "AuthStatusResponseDTO")))
+            }
+        }.resume()
     }
 
     private func send(_ event: ClientEvent) {

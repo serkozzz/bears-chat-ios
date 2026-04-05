@@ -44,6 +44,9 @@ struct LoginView: View {
             openURL(url)
             model.verificationURLToOpen = nil
         }
+        .onAppear {
+            model.checkVerificationStatus()
+        }
         .gradientBackground()
         .alert(item: $model.error) { error in
             Alert(
@@ -86,6 +89,10 @@ struct LoginView: View {
                 Text("В боте нажмите Start и поделитесь номером")
                 Button("Открыть Telegram снова") {
                     model.requestLinkForTelegramVerification()
+                }
+                .buttonStyle(.borderedProminent)
+                Button("Я поделился номером") {
+                    model.checkVerificationStatus()
                 }
                 .buttonStyle(.borderedProminent)
             }
