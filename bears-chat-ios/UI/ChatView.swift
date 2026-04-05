@@ -28,8 +28,14 @@ struct ChatView: View {
 
     @State private var isSettingsSheetPresented: Bool = false
     
-    init(userName: String, serverAPI: ServerAPI) {
-        _model = StateObject(wrappedValue: .init(userName: userName, serverAPI: serverAPI))
+    init(userName: String, serverAPI: ServerAPI, onLogout: (() -> Void)? = nil) {
+        _model = StateObject(
+            wrappedValue: .init(
+                userName: userName,
+                serverAPI: serverAPI,
+                onLogout: onLogout
+            )
+        )
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .short
@@ -43,11 +49,15 @@ struct ChatView: View {
                     .font(.caption)
                     .foregroundColor(model.isConnected ? .green : .red)
                 Spacer()
-                
-                Button() {
-                    isSettingsSheetPresented = true
+                Menu {
+                    Button("Settings", systemImage: "gear") {
+                        isSettingsSheetPresented = true
+                    }
+                    Button("Log out", systemImage: "iphone.and.arrow.right.outward") {
+                        model.logOut()
+                    }
                 } label: {
-                    Image(systemName: "gear")
+                    Image(systemName: "line.3.horizontal")
                 }
             }
             .padding(.horizontal, 8)
@@ -101,6 +111,7 @@ struct ChatView: View {
             }
             .presentationDetents([.medium])
         }
+        .toolbar(.hidden, for: .navigationBar)
         .alert(item: $model.lastError) { error in
             Alert(
                 title: Text("Error"),

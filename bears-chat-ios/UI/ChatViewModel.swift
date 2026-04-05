@@ -16,11 +16,20 @@ class ChatViewModel: ObservableObject {
 
     private let sender: SenderDTO
     private let serverAPI: ServerAPI
+    private let authSessionStorage: LastAuthSessionStorage
+    private let onLogout: (() -> Void)?
     private var currentHistoryGeneration: String?
 
-    init(userName: String, serverAPI: ServerAPI) {
+    init(
+        userName: String,
+        serverAPI: ServerAPI,
+        authSessionStorage: LastAuthSessionStorage = .shared,
+        onLogout: (() -> Void)? = nil
+    ) {
         self.sender = SenderDTO(userName: userName)
         self.serverAPI = serverAPI
+        self.authSessionStorage = authSessionStorage
+        self.onLogout = onLogout
         serverAPI.registerPushTokenIfAvailable(userName: userName)
 
         serverAPI.onConnectionChanged = { [weak self] connected in
@@ -128,5 +137,13 @@ class ChatViewModel: ObservableObject {
         let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanText.isEmpty else { return }
         serverAPI.sendMessage(text: cleanText, sender: sender)
+    }
+}
+
+
+extension ChatViewModel {
+    func logOut() {
+        authSessionStorage.clear()
+        onLogout?()
     }
 }

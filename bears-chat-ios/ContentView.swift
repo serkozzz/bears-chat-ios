@@ -26,7 +26,9 @@ struct ContentView: View {
             .navigationDestination(for: Route.self) { destination in
                 switch destination {
                 case .chat(let userName):
-                    ChatView(userName: userName, serverAPI: serverAPI)
+                    ChatView(userName: userName, serverAPI: serverAPI) {
+                        path = NavigationPath()
+                    }
                 case .login:
                     loginView
                 }

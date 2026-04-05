@@ -27,4 +27,8 @@ final class LastAuthSessionStorage {
         guard let data = defaults.data(forKey: key) else { return nil }
         return try? decoder.decode(LastAuthSession.self, from: data)
     }
+
+    func clear() {
+        defaults.removeObject(forKey: key)
+    }
 }
