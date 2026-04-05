@@ -44,24 +44,6 @@ struct ChatView: View {
     
     var body: some View {
         VStack(spacing: 8) {
-            HStack {
-                Text(model.isConnected ? "Online" : "Offline")
-                    .font(.caption)
-                    .foregroundColor(model.isConnected ? .green : .red)
-                Spacer()
-                Menu {
-                    Button("Settings", systemImage: "gear") {
-                        isSettingsSheetPresented = true
-                    }
-                    Button("Log out", systemImage: "iphone.and.arrow.right.outward") {
-                        model.logOut()
-                    }
-                } label: {
-                    Image(systemName: "line.3.horizontal")
-                }
-            }
-            .padding(.horizontal, 8)
-
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 8) {
@@ -111,7 +93,34 @@ struct ChatView: View {
             }
             .presentationDetents([.medium])
         }
-        .toolbar(.hidden, for: .navigationBar)
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(model.isConnected ? Color.green : Color.red)
+                        .frame(width: 8, height: 8)
+                    Text(model.isConnected ? "Online" : "Offline")
+                        .font(.subheadline)
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                }
+                .fixedSize(horizontal: true, vertical: false)
+            }
+
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button("Settings", systemImage: "gear") {
+                        isSettingsSheetPresented = true
+                    }
+                    Button("Log out", systemImage: "iphone.and.arrow.right.outward") {
+                        model.logOut()
+                    }
+                } label: {
+                    Image(systemName: "line.3.horizontal")
+                }
+            }
+        }
         .alert(item: $model.lastError) { error in
             Alert(
                 title: Text("Error"),
