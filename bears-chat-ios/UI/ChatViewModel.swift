@@ -13,24 +13,30 @@ class ChatViewModel: ObservableObject {
     @Published private var messagesByID: [Int: MessageDTO] = [:]
     @Published private(set) var isConnected: Bool = false
     @Published var lastError: UIError?
+    @Published private var senderIdToDisplayNameMap: [String: String] = [:]
 
     private let sender: SenderDTO
     private let serverAPI: ServerAPI
     private let authSessionStorage: LastAuthSessionStorage
+    private let senderContactsService: SenderContactsService
     private let onLogout: (() -> Void)?
     private var currentHistoryGeneration: String?
+    private var resolvedSenderIDs: Set<String> = []
 
     init(
         userName: String,
         serverAPI: ServerAPI,
         authSessionStorage: LastAuthSessionStorage = .shared,
+        senderContactsService: SenderContactsService = .shared,
         onLogout: (() -> Void)? = nil
     ) {
         self.sender = SenderDTO(userName: userName)
         self.serverAPI = serverAPI
         self.authSessionStorage = authSessionStorage
+        self.senderContactsService = senderContactsService
         self.onLogout = onLogout
         serverAPI.registerPushTokenIfAvailable(userName: userName)
+        senderContactsService.requestAccessIfNeeded()
 
         serverAPI.onConnectionChanged = { [weak self] connected in
             DispatchQueue.main.async {
@@ -119,10 +125,12 @@ class ChatViewModel: ObservableObject {
         history = []
     }
 
+    //мерж существующей на данный момент истории с новыми сообщениями
     private func merge(_ messages: [MessageDTO]) {
         var mergedByID = messagesByID
         for message in messages {
             mergedByID[message.id] = message
+            resolveSenderDisplayNameIfNeeded(senderID: message.sender.userName)
         }
 
         messagesByID = mergedByID
@@ -137,6 +145,22 @@ class ChatViewModel: ObservableObject {
         let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanText.isEmpty else { return }
         serverAPI.sendMessage(text: cleanText, sender: sender)
+    }
+
+    func displaySenderName(for message: MessageDTO) -> String {
+        senderIdToDisplayNameMap[message.sender.userName] ?? message.sender.userName
+    }
+
+    private func resolveSenderDisplayNameIfNeeded(senderID: String) {
+        let cleanSenderID = senderID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanSenderID.isEmpty else { return }
+        guard !resolvedSenderIDs.contains(cleanSenderID) else { return }
+        resolvedSenderIDs.insert(cleanSenderID)
+
+        senderContactsService.resolveDisplayName(for: cleanSenderID) { [weak self] displayName in
+            guard let self, let displayName else { return }
+            self.senderIdToDisplayNameMap[cleanSenderID] = displayName
+        }
     }
 }
 

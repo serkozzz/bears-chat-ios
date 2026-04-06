@@ -137,7 +137,7 @@ struct ChatView: View {
                 Spacer(minLength: 0)
             }
             VStack(alignment: isOwn ? .trailing : .leading, spacing: 4) {
-                Text("#\(message.id) \(message.sender.userName) \(dateFormatter.string(from: message.date))")
+                Text("#\(message.id) \(model.displaySenderName(for: message)) \(dateFormatter.string(from: message.date))")
                     .font(.caption2)
                     .foregroundColor(.gray)
 
