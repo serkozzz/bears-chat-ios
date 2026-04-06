@@ -137,7 +137,7 @@ struct ChatView: View {
                 Spacer(minLength: 0)
             }
             VStack(alignment: isOwn ? .trailing : .leading, spacing: 4) {
-                Text("#\(message.id) \(model.displaySenderName(for: message)) \(dateFormatter.string(from: message.date))")
+                Text(messageMetaText(for: message, isOwn: isOwn))
                     .font(.caption2)
                     .foregroundColor(.gray)
 
@@ -155,5 +155,13 @@ struct ChatView: View {
                 Spacer(minLength: 0)
             }
         }
+    }
+
+    private func messageMetaText(for message: MessageDTO, isOwn: Bool) -> String {
+        let dateText = dateFormatter.string(from: message.date)
+        if isOwn {
+            return "#\(message.id) \(dateText)"
+        }
+        return "#\(message.id) \(model.displaySenderName(for: message)) \(dateText)"
     }
 }
