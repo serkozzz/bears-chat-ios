@@ -13,22 +13,28 @@ struct ChatView: View {
     @State private var inputText: String = ""
     @FocusState private var isInputFocused: Bool
     private let dateFormatter: DateFormatter
-   
-    
-    @AppStorage("chatBackgroundColorHex") private var backgroundColorHex = "#FFFFFF"
-    
+    private let appPreferences: AppPreferences = AppPreferences.shared
+    @State private var backgroundColorHex: String
+
     private var backgroundColorBinding: Binding<Color> {
         Binding(
             get: { ColorHex.fromHex(backgroundColorHex) ?? .white },
             set: { newValue in
-                backgroundColorHex = ColorHex.toHex(newValue) ?? "#FFFFFF"
+                let hex = ColorHex.toHex(newValue) ?? "#FFFFFF"
+                backgroundColorHex = hex
+                appPreferences.chatBackgroundColorHex = hex
             }
         )
     }
 
     @State private var isSettingsSheetPresented: Bool = false
     
-    init(userName: String, serverAPI: ServerAPI, onLogout: (() -> Void)? = nil) {
+    init(
+        userName: String,
+        serverAPI: ServerAPI,
+        onLogout: (() -> Void)? = nil
+    ) {
+        _backgroundColorHex = State(initialValue: appPreferences.chatBackgroundColorHex)
         _model = StateObject(
             wrappedValue: .init(
                 userName: userName,

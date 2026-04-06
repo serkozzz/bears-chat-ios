@@ -45,7 +45,7 @@ struct LoginView: View {
             model.verificationURLToOpen = nil
         }
         .onAppear {
-            model.checkVerificationStatus()
+            model.tryToLogin()
         }
         .gradientBackground()
         .alert(item: $model.error) { error in
@@ -92,7 +92,7 @@ struct LoginView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 Button("Я поделился номером") {
-                    model.checkVerificationStatus()
+                    model.tryToLogin()
                 }
                 .buttonStyle(.borderedProminent)
             }

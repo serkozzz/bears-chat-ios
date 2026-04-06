@@ -122,6 +122,7 @@ final class WebSocketManager: NSObject {
     private func updateConnectionState(_ connected: Bool) {
         guard isConnected != connected else { return }
         isConnected = connected
+        print("onConnectionChanged: \(connected)")
         onConnectionChanged?(connected)
     }
 

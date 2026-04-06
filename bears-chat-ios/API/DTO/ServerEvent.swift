@@ -22,7 +22,12 @@ struct RequestedMessagesServerPayload: Codable {
     let messages: [MessageDTO]
 }
 
+struct AuthorizedServerPayload: Codable {
+    let ok: Bool
+}
+
 enum ServerEvent: Decodable {
+    case authorized(AuthorizedServerPayload)
     case newMessage(NewMessageServerPayload)
     case requestedMessages(RequestedMessagesServerPayload) // server sends requested history chunk
     case error(ServerErrorPayload)
@@ -33,6 +38,7 @@ enum ServerEvent: Decodable {
     }
 
     private enum EventType: String, Codable {
+        case authorized
         case newMessage
         case requestedMessages
         case error
@@ -43,6 +49,9 @@ enum ServerEvent: Decodable {
         let type = try container.decode(EventType.self, forKey: .type)
 
         switch type {
+        case .authorized:
+            let payload = try container.decode(AuthorizedServerPayload.self, forKey: .payload)
+            self = .authorized(payload)
         case .newMessage:
             let payload = try container.decode(NewMessageServerPayload.self, forKey: .payload)
             self = .newMessage(payload)

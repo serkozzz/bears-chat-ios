@@ -28,4 +28,12 @@ enum API {
     static var authStatusURL: URL {
         baseURL.appendingPathComponent("auth/status")
     }
+
+    static var authExchangeURL: URL {
+        baseURL.appendingPathComponent("auth/exchange")
+    }
+
+    static var authLogoutURL: URL {
+        baseURL.appendingPathComponent("auth/logout")
+    }
 }

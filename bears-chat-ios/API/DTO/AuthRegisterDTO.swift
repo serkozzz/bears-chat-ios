@@ -18,3 +18,11 @@ struct AuthStatusRequestDTO {
     let phoneNumber: String
     let deviceId: String
 }
+
+struct AuthExchangeRequestDTO: Codable {
+    let verificationToken: String
+}
+
+struct AuthExchangeResponseDTO: Codable {
+    let accessToken: String
+}

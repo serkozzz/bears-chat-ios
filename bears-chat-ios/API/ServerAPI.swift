@@ -41,7 +41,7 @@ enum ServerAPIError: LocalizedError {
 }
 
 class ServerAPI {
-    private(set) var isConnected: Bool = false
+    private(set) var isConnectedAndAuthorized: Bool = false
 
     var onNewMessage: ((NewMessageServerPayload) -> Void)?
     var onRequestedMessages: ((RequestedMessagesServerPayload) -> Void)?
@@ -49,19 +49,30 @@ class ServerAPI {
     var onConnectionChanged: ((Bool) -> Void)?
 
     private let webSocketClient: WebSocketManager
-    private let encoder = JSONEncoder()
-    private let decoder = JSONDecoder()
-    private let urlSession: URLSession
+    private let authSessionStorage: AuthSessionStorage
     private var pushToken: String?
+    private var isWebSocketConnected = false
+    private var isAuthorized = false
 
-    init() {
+    var hasAccessToken: Bool {
+        accessToken != nil
+    }
+    private(set) var accessToken: String?
+    
+    let encoder = JSONEncoder()
+    let decoder = JSONDecoder()
+    let urlSession: URLSession
+
+    init(authSessionStorage: AuthSessionStorage = .shared) {
+        self.authSessionStorage = authSessionStorage
         self.urlSession = .shared
         self.webSocketClient = WebSocketManager(url: API.webSocketURL)
+        self.accessToken = authSessionStorage.loadAccessToken()
         decoder.dateDecodingStrategy = .iso8601
         encoder.dateEncodingStrategy = .iso8601
 
         webSocketClient.onConnectionChanged = { [weak self] connected in
-            self?.updateConnectionState(connected)
+            self?.handleTransportConnectionChanged(connected)
         }
 
         webSocketClient.onError = { [weak self] error in
@@ -74,19 +85,31 @@ class ServerAPI {
     }
 
     func connect() {
+        guard accessToken != nil else { return }
         webSocketClient.connect()
     }
 
     func disconnect() {
         webSocketClient.disconnect()
+        isWebSocketConnected = false
+        isAuthorized = false
+        updateConnectionState(false)
     }
 
     func sendMessage(text: String, sender: SenderDTO) {
+        guard isConnectedAndAuthorized else {
+            onError?("Socket is not authorized yet")
+            return
+        }
         let event: ClientEvent = .sendMessage(SendMessagePayload(text: text, sender: sender))
         send(event)
     }
 
     func getAllMessages(fromID: Int) {
+        guard isConnectedAndAuthorized else {
+            onError?("Socket is not authorized yet")
+            return
+        }
         let event: ClientEvent = .getAllMessagesFrom(GetAllMessagesFromPayload(fromId: fromID))
         send(event)
     }
@@ -101,138 +124,6 @@ class ServerAPI {
     func registerPushTokenIfAvailable(userName: String) {
         guard !userName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         registerPushToken(userName: userName)
-    }
-
-    func registerForTelegramVerification(
-        phoneNumber: String,
-        deviceId: String,
-        completion: @escaping (Result<AuthRegisterResponseDTO, Error>) -> Void
-    ) {
-        let cleanPhone = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cleanDeviceID = deviceId.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !cleanPhone.isEmpty, !cleanDeviceID.isEmpty else {
-            completion(.failure(ServerAPIError.missingRequiredParameters(["phoneNumber", "deviceId"])))
-            return
-        }
-
-        let body = AuthRegisterRequestDTO(phoneNumber: cleanPhone, deviceId: cleanDeviceID)
-
-        do {
-            let data = try encoder.encode(body)
-            var request = URLRequest(url: API.authRegisterURL)
-            request.httpMethod = "POST"
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = data
-
-            urlSession.dataTask(with: request) { [weak self] data, response, error in
-                if let error {
-                    completion(.failure(ServerAPIError.network(underlying: error)))
-                    return
-                }
-
-                guard let httpResponse = response as? HTTPURLResponse else {
-                    completion(.failure(ServerAPIError.invalidResponse))
-                    return
-                }
-
-                guard let data else {
-                    completion(.failure(ServerAPIError.emptyResponse))
-                    return
-                }
-
-                guard (200...299).contains(httpResponse.statusCode) else {
-                    let message = self?.extractMessage(from: data)
-                    completion(.failure(ServerAPIError.httpStatus(code: httpResponse.statusCode, message: message)))
-                    return
-                }
-
-                do {
-                    let result = try self?.decoder.decode(AuthRegisterResponseDTO.self, from: data)
-                    if let result {
-                        completion(.success(result))
-                    } else {
-                        completion(.failure(ServerAPIError.decodingFailed(type: "AuthRegisterResponseDTO")))
-                    }
-                } catch {
-                    completion(.failure(ServerAPIError.decodingFailed(type: "AuthRegisterResponseDTO")))
-                }
-            }.resume()
-        } catch {
-            completion(.failure(ServerAPIError.encodingFailed(underlying: error)))
-        }
-    }
-
-    func getAuthStatus(
-        phoneNumber: String,
-        deviceId: String,
-        completion: @escaping (Result<AuthStatusResponseDTO, Error>) -> Void
-    ) {
-        let cleanPhone = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cleanDeviceID = deviceId.trimmingCharacters(in: .whitespacesAndNewlines)
-        let query = AuthStatusRequestDTO(phoneNumber: cleanPhone, deviceId: cleanDeviceID)
-
-        guard !cleanPhone.isEmpty, !cleanDeviceID.isEmpty else {
-            completion(.failure(ServerAPIError.missingRequiredParameters(["phoneNumber", "deviceId"])))
-            return
-        }
-
-        var components = URLComponents(url: API.authStatusURL, resolvingAgainstBaseURL: false)
-        components?.queryItems = [
-            URLQueryItem(name: "phoneNumber", value: query.phoneNumber),
-            URLQueryItem(name: "deviceId", value: query.deviceId)
-        ]
-
-        guard let url = components?.url else {
-            completion(.failure(ServerAPIError.invalidURL))
-            return
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-
-        urlSession.dataTask(with: request) { [weak self] data, response, error in
-            if let error {
-                completion(.failure(ServerAPIError.network(underlying: error)))
-                return
-            }
-
-            guard let httpResponse = response as? HTTPURLResponse else {
-                completion(.failure(ServerAPIError.invalidResponse))
-                return
-            }
-
-            if httpResponse.statusCode == 404 {
-                completion(.success(AuthStatusResponseDTO(isVerified: false)))
-                return
-            }
-
-            guard let data else {
-                completion(.failure(ServerAPIError.emptyResponse))
-                return
-            }
-
-            guard (200...299).contains(httpResponse.statusCode) else {
-                let message = self?.extractMessage(from: data)
-                completion(
-                    .failure(
-                        ServerAPIError.httpStatus(code: httpResponse.statusCode, message: message)
-                    )
-                )
-                return
-            }
-
-            do {
-                let result = try self?.decoder.decode(AuthStatusResponseDTO.self, from: data)
-                if let result {
-                    completion(.success(result))
-                } else {
-                    completion(.failure(ServerAPIError.decodingFailed(type: "AuthStatusResponseDTO")))
-                }
-            } catch {
-                completion(.failure(ServerAPIError.decodingFailed(type: "AuthStatusResponseDTO")))
-            }
-        }.resume()
     }
 
     private func send(_ event: ClientEvent) {
@@ -259,11 +150,16 @@ class ServerAPI {
             let event = try decoder.decode(ServerEvent.self, from: data)
 
             switch event {
+            case .authorized:
+                print("[ServerAPI] received authorized event")
+                isAuthorized = true
+                updateConnectionState(isWebSocketConnected && isAuthorized)
             case .newMessage(let payload):
                 onNewMessage?(payload)
             case .requestedMessages(let payload):
                 onRequestedMessages?(payload)
             case .error(let payload):
+                print("[ServerAPI] received error event: \(payload.message)")
                 onError?(payload.message)
             }
         } catch {
@@ -272,9 +168,40 @@ class ServerAPI {
     }
 
     private func updateConnectionState(_ connected: Bool) {
-        guard isConnected != connected else { return }
-        isConnected = connected
+        guard isConnectedAndAuthorized != connected else { return }
+        print("[ServerAPI] onConnectionChanged: \(connected) (ws=\(isWebSocketConnected), authorized=\(isAuthorized))")
+        isConnectedAndAuthorized = connected
         onConnectionChanged?(connected)
+    }
+
+    func logout() {
+        revokeAccessTokenOnServerIfNeeded()
+        accessToken = nil
+        authSessionStorage.clearAll()
+        disconnect()
+    }
+
+    private func revokeAccessTokenOnServerIfNeeded() {
+        guard let accessToken, !accessToken.isEmpty else { return }
+        let body = AuthLogoutRequestDTO(accessToken: accessToken)
+
+        do {
+            let data = try encoder.encode(body)
+            var request = URLRequest(url: API.authLogoutURL)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = data
+
+            urlSession.dataTask(with: request) { _, response, error in
+                if error != nil {
+                    return
+                }
+                guard let httpResponse = response as? HTTPURLResponse else { return }
+                if !(200...299).contains(httpResponse.statusCode) { return }
+            }.resume()
+        } catch {
+            return
+        }
     }
 
     private func registerPushToken(userName: String?) {
@@ -310,10 +237,42 @@ class ServerAPI {
         }
     }
 
-    private func extractMessage(from data: Data) -> String? {
+    func extractMessage(from data: Data) -> String? {
         struct ErrorPayload: Decodable {
             let message: String
         }
         return try? decoder.decode(ErrorPayload.self, from: data).message
+    }
+
+    private func handleTransportConnectionChanged(_ connected: Bool) {
+        print("[ServerAPI] transport connection changed: \(connected)")
+        isWebSocketConnected = connected
+
+        if !connected {
+            isAuthorized = false
+            updateConnectionState(false)
+            return
+        }
+
+        isAuthorized = false
+        guard let accessToken else {
+            print("[ServerAPI] transport is up, but access token is missing")
+            updateConnectionState(false)
+            return
+        }
+        print("[ServerAPI] sending auth event")
+        send(.auth(AuthPayload(accessToken: accessToken)))
+    }
+
+    func applyAccessTokenIfNeeded(_ token: String?) {
+        guard let token, !token.isEmpty else { return }
+        guard accessToken != token else { return }
+        accessToken = token
+        authSessionStorage.saveAccessToken(token)
+        if isWebSocketConnected {
+            send(.auth(AuthPayload(accessToken: token)))
+        } else {
+            connect()
+        }
     }
 }

@@ -16,7 +16,12 @@ struct GetAllMessagesFromPayload: Codable {
     let fromId: Int
 }
 
+struct AuthPayload: Codable {
+    let accessToken: String
+}
+
 enum ClientEvent: Encodable {
+    case auth(AuthPayload)
     case sendMessage(SendMessagePayload)
     case getAllMessagesFrom(GetAllMessagesFromPayload)
 
@@ -29,6 +34,9 @@ enum ClientEvent: Encodable {
         var container = encoder.container(keyedBy: CodingKeys.self)
 
         switch self {
+        case .auth(let payload):
+            try container.encode("auth", forKey: .type)
+            try container.encode(payload, forKey: .payload)
         case .sendMessage(let payload):
             try container.encode("sendMessage", forKey: .type)
             try container.encode(payload, forKey: .payload)

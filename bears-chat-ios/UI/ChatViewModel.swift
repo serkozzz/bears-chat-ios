@@ -17,7 +17,6 @@ class ChatViewModel: ObservableObject {
 
     private let sender: SenderDTO
     private let serverAPI: ServerAPI
-    private let authSessionStorage: LastAuthSessionStorage
     private let senderContactsService: SenderContactsService
     private let onLogout: (() -> Void)?
     private var currentHistoryGeneration: String?
@@ -26,13 +25,11 @@ class ChatViewModel: ObservableObject {
     init(
         userName: String,
         serverAPI: ServerAPI,
-        authSessionStorage: LastAuthSessionStorage = .shared,
         senderContactsService: SenderContactsService = .shared,
         onLogout: (() -> Void)? = nil
     ) {
         self.sender = SenderDTO(userName: userName)
         self.serverAPI = serverAPI
-        self.authSessionStorage = authSessionStorage
         self.senderContactsService = senderContactsService
         self.onLogout = onLogout
         serverAPI.registerPushTokenIfAvailable(userName: userName)
@@ -74,20 +71,13 @@ class ChatViewModel: ObservableObject {
             }
         }
 
-        syncConnectionState(serverAPI.isConnected)
+        syncConnectionState(serverAPI.isConnectedAndAuthorized)
 
         serverAPI.onError = { [weak self] error in
             DispatchQueue.main.async {
                 self?.lastError = UIError(message: error)
             }
         }
-    }
-
-    deinit {
-        serverAPI.onConnectionChanged = nil
-        serverAPI.onRequestedMessages = nil
-        serverAPI.onNewMessage = nil
-        serverAPI.onError = nil
     }
 
     private var lastMessageID: Int {
@@ -167,7 +157,7 @@ class ChatViewModel: ObservableObject {
 
 extension ChatViewModel {
     func logOut() {
-        authSessionStorage.clear()
+        serverAPI.logout()
         onLogout?()
     }
 }
