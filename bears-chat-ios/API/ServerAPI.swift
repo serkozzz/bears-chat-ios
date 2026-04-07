@@ -59,8 +59,8 @@ class ServerAPI {
     }
     private(set) var accessToken: String?
     
-    let encoder = JSONEncoder()
-    let decoder = JSONDecoder()
+    let encoder: JSONEncoder
+    let decoder: JSONDecoder
     let urlSession: URLSession
 
     init(authSessionStorage: AuthSessionStorage = .shared) {
@@ -68,8 +68,8 @@ class ServerAPI {
         self.urlSession = .shared
         self.webSocketClient = WebSocketManager(url: API.webSocketURL)
         self.accessToken = authSessionStorage.loadAccessToken()
-        decoder.dateDecodingStrategy = .iso8601
-        encoder.dateEncodingStrategy = .iso8601
+        self.decoder = APIJSONCoders.makeDecoder()
+        self.encoder = APIJSONCoders.makeEncoder()
 
         webSocketClient.onConnectionChanged = { [weak self] connected in
             self?.handleTransportConnectionChanged(connected)
@@ -141,14 +141,13 @@ class ServerAPI {
     }
 
     private func handleIncoming(_ text: String) {
+        guard let data = text.data(using: .utf8) else {
+            onError?("Invalid UTF-8 payload")
+            return
+        }
+
         do {
-            guard let data = text.data(using: .utf8) else {
-                onError?("Invalid UTF-8 payload")
-                return
-            }
-
             let event = try decoder.decode(ServerEvent.self, from: data)
-
             switch event {
             case .authorized:
                 print("[ServerAPI] received authorized event")
@@ -163,6 +162,8 @@ class ServerAPI {
                 onError?(payload.message)
             }
         } catch {
+            print("[ServerAPI] failed to decode WS message: \(error.localizedDescription)")
+            print("[ServerAPI] raw WS message: \(text)")
             onError?(error.localizedDescription)
         }
     }
